@@ -1,41 +1,167 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Study Mode</title>
+    <meta charset="UTF-8">
+    <title>System Monitor v4.2</title>
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #121212; color: white; }
-        #status { font-size: 1.5rem; margin-top: 20px; }
-        .on { color: #4CAF50; }
-        .off { color: #F44336; }
+        body {
+            background-color: #0d0d0d;
+            color: #00ff41; /* Classic Matrix/Terminal Green */
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #boot-screen {
+            width: 80%;
+            max-width: 600px;
+        }
+
+        #main-ui {
+            display: none;
+            text-align: center;
+            border: 1px solid #00ff41;
+            padding: 30px;
+            box-shadow: 0 0 15px #00ff41;
+        }
+
+        .btn {
+            background: transparent;
+            color: #00ff41;
+            border: 2px solid #00ff41;
+            padding: 10px 25px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: 0.3s;
+        }
+
+        .btn:hover {
+            background: #00ff41;
+            color: #0d0d0d;
+        }
+
+        #log {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            height: 100px;
+            overflow-y: auto;
+            text-align: left;
+            width: 100%;
+            border-top: 1px solid #00ff41;
+            padding-top: 10px;
+        }
+
+        .status-active { color: #00ff41; font-weight: bold; }
+        .status-idle { color: #ffae00; }
     </style>
 </head>
 <body>
-    <h1>Caffeine Mode</h1>
-    <div id="status">Checking...</div>
-    <p>Keep this tab open to prevent auto-lock.</p>
+
+    <div id="boot-screen"></div>
+
+    <div id="main-ui">
+        <h2>SYSTEM_STAY_AWAKE_PROTOCOL</h2>
+        <p>Status: <span id="status" class="status-idle">IDLE</span></p>
+        <p>Uptime: <span id="timer">00:00:00</span></p>
+        <button class="btn" id="toggleBtn">INITIALIZE CORE</button>
+        <div id="log"></div>
+    </div>
 
     <script>
-        let wakeLock = null;
+        const bootScreen = document.getElementById('boot-screen');
+        const mainUI = document.getElementById('main-ui');
+        const statusEl = document.getElementById('status');
+        const timerEl = document.getElementById('timer');
+        const logEl = document.getElementById('log');
+        const btn = document.getElementById('toggleBtn');
 
-        const requestWakeLock = async () => {
+        let wakeLock = null;
+        let startTime;
+        let timerInterval;
+
+        // 1. Fake Boot Sequence
+        const bootLines = [
+            "> Initializing BIOS...",
+            "> Loading kernel modules...",
+            "> Checking network protocols...",
+            "> Establishing secure handshake...",
+            "> System Ready."
+        ];
+
+        let lineIdx = 0;
+        function typeBoot() {
+            if (lineIdx < bootLines.length) {
+                const p = document.createElement('p');
+                p.textContent = bootLines[lineIdx];
+                bootScreen.appendChild(p);
+                lineIdx++;
+                setTimeout(typeBoot, 600);
+            } else {
+                setTimeout(() => {
+                    bootScreen.style.display = 'none';
+                    mainUI.style.display = 'block';
+                }, 500);
+            }
+        }
+
+        // 2. Wake Lock & Timer Logic
+        async function startCaffeine() {
             try {
                 wakeLock = await navigator.wakeLock.request('screen');
-                document.getElementById('status').textContent = "ACTIVE: Screen won't lock";
-                document.getElementById('status').className = "on";
+                statusEl.textContent = "ACTIVE";
+                statusEl.className = "status-active";
+                btn.textContent = "TERMINATE CORE";
+                addLog("WakeLock acquired. Auto-lock disabled.");
                 
-                wakeLock.addEventListener('release', () => {
-                    document.getElementById('status').textContent = "INACTIVE: Click to Reactivate";
-                    document.getElementById('status').className = "off";
-                });
+                startTime = Date.now();
+                timerInterval = setInterval(updateTimer, 1000);
             } catch (err) {
-                document.getElementById('status').textContent = "Error: Wake Lock not supported";
+                addLog("Error: System policy may block WakeLock.");
             }
-        };
+        }
 
-        // Request lock on page load
-        window.addEventListener('focus', requestWakeLock);
-        document.body.addEventListener('click', requestWakeLock);
-        requestWakeLock();
+        function stopCaffeine() {
+            if (wakeLock) {
+                wakeLock.release();
+                wakeLock = null;
+            }
+            clearInterval(timerInterval);
+            statusEl.textContent = "IDLE";
+            statusEl.className = "status-idle";
+            btn.textContent = "INITIALIZE CORE";
+            addLog("WakeLock released. System idle.");
+        }
+
+        function updateTimer() {
+            const elapsed = Date.now() - startTime;
+            const seconds = Math.floor((elapsed / 1000) % 60).toString().padStart(2, '0');
+            const minutes = Math.floor((elapsed / (1000 * 60)) % 60).toString().padStart(2, '0');
+            const hours = Math.floor((elapsed / (1000 * 60 * 60))).toString().padStart(2, '0');
+            timerEl.textContent = `${hours}:${minutes}:${seconds}`;
+        }
+
+        function addLog(msg) {
+            const entry = document.createElement('div');
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.prepend(entry);
+        }
+
+        btn.addEventListener('click', () => {
+            if (!wakeLock) {
+                startCaffeine();
+            } else {
+                stopCaffeine();
+            }
+        });
+
+        // Start the sequence
+        typeBoot();
     </script>
 </body>
 </html>
