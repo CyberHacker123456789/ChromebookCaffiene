@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Study Mode</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #121212; color: white; }
+        #status { font-size: 1.5rem; margin-top: 20px; }
+        .on { color: #4CAF50; }
+        .off { color: #F44336; }
+    </style>
+</head>
+<body>
+    <h1>Caffeine Mode</h1>
+    <div id="status">Checking...</div>
+    <p>Keep this tab open to prevent auto-lock.</p>
+
+    <script>
+        let wakeLock = null;
+
+        const requestWakeLock = async () => {
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+                document.getElementById('status').textContent = "ACTIVE: Screen won't lock";
+                document.getElementById('status').className = "on";
+                
+                wakeLock.addEventListener('release', () => {
+                    document.getElementById('status').textContent = "INACTIVE: Click to Reactivate";
+                    document.getElementById('status').className = "off";
+                });
+            } catch (err) {
+                document.getElementById('status').textContent = "Error: Wake Lock not supported";
+            }
+        };
+
+        // Request lock on page load
+        window.addEventListener('focus', requestWakeLock);
+        document.body.addEventListener('click', requestWakeLock);
+        requestWakeLock();
+    </script>
+</body>
+</html>
