@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SYSTEM_CAFFEINE_v5.1</title>
+    <title>SYSTEM_CAFFEINE_v5.2</title>
     <style>
         :root { --main-green: #00ff41; --bg-black: #0d0d0d; }
         body {
@@ -18,176 +18,140 @@
             overflow: hidden;
         }
 
-        /* --- FORCED LOADING SCREEN --- */
-        #loader {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            z-index: 999;
-        }
+        #loader { display: flex; flex-direction: column; align-items: center; text-align: center; }
         .spinner {
-            width: 60px;
-            height: 60px;
-            border: 4px solid rgba(0, 255, 65, 0.1);
-            border-top: 4px solid var(--main-green);
+            width: 50px; height: 50px;
+            border: 3px solid rgba(0, 255, 65, 0.1);
+            border-top: 3px solid var(--main-green);
             border-radius: 50%;
             animation: spin 1s linear infinite;
+            margin-bottom: 20px;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* --- MAIN UI --- */
-        #main-ui {
-            display: none; /* Hidden until boot finishes */
-            text-align: center;
-            border: 1px solid var(--main-green);
-            padding: 40px;
-            box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
-        }
-
+        #main-ui { display: none; text-align: center; border: 1px solid var(--main-green); padding: 30px; box-shadow: 0 0 15px var(--main-green); }
         .btn {
-            background: transparent;
-            color: var(--main-green);
-            border: 1px solid var(--main-green);
-            padding: 15px 25px;
-            font-size: 1rem;
-            cursor: pointer;
-            margin: 10px;
-            text-transform: uppercase;
+            background: transparent; color: var(--main-green); border: 1px solid var(--main-green);
+            padding: 12px 20px; font-size: 0.9rem; cursor: pointer; margin: 10px;
         }
         .btn:hover { background: var(--main-green); color: var(--bg-black); }
-
-        #log {
-            margin-top: 20px;
-            font-size: 0.8rem;
-            height: 120px;
-            overflow-y: auto;
-            text-align: left;
-            border-top: 1px solid var(--main-green);
-            padding-top: 10px;
-        }
         
-        /* Ensure the video is "technically" visible but hidden from the user */
-        #caffeineVid {
-            width: 160px;
-            height: 90px;
-            position: absolute;
-            bottom: 0;
-            right: 0;
-            opacity: 0.001; 
-            pointer-events: none;
+        #log {
+            margin-top: 15px; font-size: 0.7rem; height: 80px; overflow-y: auto;
+            text-align: left; border-top: 1px solid var(--main-green); padding-top: 10px;
         }
+
+        /* We make the video tiny but technically 'visible' so PiP works */
+        #caffeineVid { width: 10px; height: 10px; position: absolute; bottom: 0; opacity: 0.1; }
     </style>
 </head>
 <body>
 
     <div id="loader">
         <div class="spinner"></div>
-        <h2 id="load-text">INITIALIZING...</h2>
+        <div id="load-msg">CONNECTING...</div>
     </div>
 
     <div id="main-ui">
-        <h2>CAFFEINE_PROTOCOL_V5</h2>
-        <p>STATUS: <span id="status">IDLE</span></p>
+        <h3>CAFFEINE_OS_v5.2</h3>
+        <p>CORE_STATUS: <span id="status">IDLE</span></p>
         <p>UPTIME: <span id="timer">00:00:00</span></p>
         
         <button class="btn" id="startBtn">START CORE</button>
         <button class="btn" id="pipBtn">ENABLE FLOATING</button>
         
         <video id="caffeineVid" loop playsinline muted></video>
-        
         <div id="log"></div>
     </div>
 
     <script>
-        const loader = document.getElementById('loader');
-        const loadText = document.getElementById('load-text');
-        const mainUI = document.getElementById('main-ui');
         const startBtn = document.getElementById('startBtn');
         const pipBtn = document.getElementById('pipBtn');
         const vid = document.getElementById('caffeineVid');
         const logEl = document.getElementById('log');
 
         let wakeLock = null;
-        let startTime;
+        let startTime = null;
 
-        // 1. FORCED BOOT SEQUENCE (Will definitely show up now)
-        const bootMessages = [
-            "CONNECTING TO KERNEL...",
-            "DEFEATING AUTO-LOCK...",
-            "BYPASSING CHROME_POLICY...",
-            "HANDSHAKE COMPLETE."
-        ];
-        
-        let i = 0;
-        const bootSequence = setInterval(() => {
-            if (i < bootMessages.length) {
-                loadText.innerText = bootMessages[i];
-                i++;
-            } else {
-                clearInterval(bootSequence);
-                loader.style.display = "none";
-                mainUI.style.display = "block";
-                addLog("System ready for deployment.");
-            }
-        }, 1000); // 1 second per message
+        // --- 1. BOOT SEQUENCE ---
+        setTimeout(() => { document.getElementById('load-msg').innerText = "BYPASSING POLICIES..."; }, 1000);
+        setTimeout(() => { document.getElementById('load-msg').innerText = "GENERATING HEARTBEAT..."; }, 2000);
+        setTimeout(() => { 
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('main-ui').style.display = 'block';
+        }, 3000);
 
-        // 2. WAKE LOGIC
-        const videoData = "data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAAZhtZGF0AAAByW1vb3YAAABsbXZoZAAAAADbe6S823ukvAAAA+gAAAAAAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABidHJhawAAAFx0a2hkAAAAAdt7pLzbe6S8AAAAAQAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAIXbWRpYQAAACBtZGhkAAAAAdt7pLzbe6S8AAAA6AAAA+gUAAAAAAAhYmxlbgAAAAAAbWluZgAAABRoZGxyAAAAAAAAAAB2aWRlAAAAAAAAAAAAAAAVZGluZgAAABxkcmVmAAAAAAAAAAEAAAAMdXJsIAAAAAEAAAEQc3RibAAAALhzdHNkAAAAAAAAAAEAAACWYXZjMQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAD6APoAAAAAABIAAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAs/+EAFWfEACz7AQZAgIACAo6CkoCigKKAoAAAHAAB4XAXi4AAAAAoc3R0cwAAAAAAAAABAAAAAQAA6AAAAAAAc3RzYwAAAAAAAAABAAAAAQAAAAEAAAABAAAAFHN0c3oAAAAAAAAAAAAAAAEAAAAUc3RjbwAAAAAAAAABAAAALAAAAGd1ZHRhAAAAX21ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1klyAAAAAAAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRhAAAAAQAAAABMYXZmNTguMjkuMTAw";
+        // --- 2. THE VIDEO GENERATOR ---
+        // This creates a fake video stream so PiP has something to 'watch'
+        function createStream() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            setInterval(() => {
+                ctx.fillStyle = '#' + Math.floor(Math.random()*16777215).toString(16);
+                ctx.fillRect(0, 0, 64, 64);
+            }, 100);
+            return canvas.captureStream();
+        }
 
-        startBtn.onclick = async () => {
-            addLog("Core initialization triggered...");
+        // --- 3. LOGIC ---
+        startBtn.addEventListener('click', async () => {
+            addLog("Initializing...");
+
+            // Fix for the Timer: Set startTime immediately
+            startTime = Date.now();
             
-            // Acquire WakeLock API
+            // WakeLock
             if ('wakeLock' in navigator) {
                 try {
                     wakeLock = await navigator.wakeLock.request('screen');
-                    addLog("WakeLock: ACTIVE");
+                    addLog("WakeLock: OK");
                 } catch (e) {
-                    addLog("WakeLock: BLOCKED by Admin.");
+                    addLog("WakeLock: BLOCKED");
                 }
             }
 
-            // Start Video
-            vid.src = videoData;
+            // Video Stream
+            vid.srcObject = createStream();
             await vid.play();
-            addLog("Heartbeat: ACTIVE");
+            addLog("Heartbeat: OK");
 
-            document.getElementById('status').innerText = "RUNNING";
-            startTime = Date.now();
+            document.getElementById('status').innerText = "ACTIVE";
+            document.getElementById('status').style.color = "#00ff41";
+            
+            // Start Timer Loop
             setInterval(updateTimer, 1000);
-        };
+        });
 
-        // 3. PICTURE-IN-PICTURE (The "Keep Background Awake" trick)
-        pipBtn.onclick = async () => {
-            if (!vid.src) {
-                addLog("Error: Initialize Core first!");
+        pipBtn.addEventListener('click', async () => {
+            if (!vid.srcObject) {
+                addLog("Error: Start Core first!");
                 return;
             }
             try {
-                // Some Chromebooks require the video to be "visible" to enter PiP
-                vid.style.opacity = "1"; 
+                // We must interact with the video element directly for some Chrome versions
                 await vid.requestPictureInPicture();
-                vid.style.opacity = "0.001";
-                addLog("Floating Window: ENABLED");
+                addLog("Floating: ENABLED");
             } catch (e) {
-                addLog("PiP Error: Check permissions.");
-                console.error(e);
+                addLog("PiP: System Denied.");
+                console.log(e);
             }
-        };
+        });
 
         function updateTimer() {
+            if (!startTime) return;
             const now = Date.now();
-            const diff = new Date(now - startTime);
-            const h = String(diff.getUTCHours()).padStart(2, '0');
-            const m = String(diff.getUTCMinutes()).padStart(2, '0');
-            const s = String(diff.getUTCSeconds()).padStart(2, '0');
+            const diff = Math.floor((now - startTime) / 1000);
+            const h = Math.floor(diff / 3600).toString().padStart(2, '0');
+            const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
+            const s = (diff % 60).toString().padStart(2, '0');
             document.getElementById('timer').innerText = `${h}:${m}:${s}`;
         }
 
-        function addLog(text) {
-            const entry = document.createElement('div');
-            entry.innerText = `> ${text}`;
-            logEl.prepend(entry);
+        function addLog(msg) {
+            const d = document.createElement('div');
+            d.innerText = `> ${msg}`;
+            logEl.prepend(d);
         }
     </script>
 </body>
