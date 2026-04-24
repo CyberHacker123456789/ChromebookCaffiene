@@ -6,7 +6,7 @@
     <style>
         body {
             background-color: #0d0d0d;
-            color: #00ff41; /* Classic Matrix/Terminal Green */
+            color: #00ff41;
             font-family: 'Courier New', Courier, monospace;
             display: flex;
             flex-direction: column;
@@ -16,49 +16,11 @@
             margin: 0;
             overflow: hidden;
         }
-
-        #boot-screen {
-            width: 80%;
-            max-width: 600px;
-        }
-
-        #main-ui {
-            display: none;
-            text-align: center;
-            border: 1px solid #00ff41;
-            padding: 30px;
-            box-shadow: 0 0 15px #00ff41;
-        }
-
-        .btn {
-            background: transparent;
-            color: #00ff41;
-            border: 2px solid #00ff41;
-            padding: 10px 25px;
-            font-size: 1.2rem;
-            cursor: pointer;
-            margin-top: 20px;
-            transition: 0.3s;
-        }
-
-        .btn:hover {
-            background: #00ff41;
-            color: #0d0d0d;
-        }
-
-        #log {
-            margin-top: 20px;
-            font-size: 0.9rem;
-            height: 100px;
-            overflow-y: auto;
-            text-align: left;
-            width: 100%;
-            border-top: 1px solid #00ff41;
-            padding-top: 10px;
-        }
-
-        .status-active { color: #00ff41; font-weight: bold; }
-        .status-idle { color: #ffae00; }
+        #main-ui { display: none; text-align: center; border: 1px solid #00ff41; padding: 30px; box-shadow: 0 0 15px #00ff41; }
+        .btn { background: transparent; color: #00ff41; border: 2px solid #00ff41; padding: 10px 25px; font-size: 1.2rem; cursor: pointer; margin-top: 20px; }
+        .btn:hover { background: #00ff41; color: #0d0d0d; }
+        #log { margin-top: 20px; font-size: 0.8rem; height: 80px; overflow-y: auto; text-align: left; width: 100%; border-top: 1px solid #00ff41; }
+        .status-active { color: #00ff41; font-weight: bold; text-shadow: 0 0 5px #00ff41; }
     </style>
 </head>
 <body>
@@ -67,101 +29,88 @@
 
     <div id="main-ui">
         <h2>SYSTEM_STAY_AWAKE_PROTOCOL</h2>
-        <p>Status: <span id="status" class="status-idle">IDLE</span></p>
+        <p>Status: <span id="status">IDLE</span></p>
         <p>Uptime: <span id="timer">00:00:00</span></p>
         <button class="btn" id="toggleBtn">INITIALIZE CORE</button>
+        <video id="caffeineVideo" loop playsinline muted style="display:none;"></video>
         <div id="log"></div>
     </div>
 
     <script>
-        const bootScreen = document.getElementById('boot-screen');
-        const mainUI = document.getElementById('main-ui');
         const statusEl = document.getElementById('status');
         const timerEl = document.getElementById('timer');
         const logEl = document.getElementById('log');
         const btn = document.getElementById('toggleBtn');
+        const vid = document.getElementById('caffeineVideo');
 
         let wakeLock = null;
-        let startTime;
         let timerInterval;
+        let startTime;
 
-        // 1. Fake Boot Sequence
-        const bootLines = [
-            "> Initializing BIOS...",
-            "> Loading kernel modules...",
-            "> Checking network protocols...",
-            "> Establishing secure handshake...",
-            "> System Ready."
-        ];
+        // 1. Tiny 1x1 pixel silent video (Base64)
+        // This ensures the code works without needing an external .mp4 file
+        const silentVideoSrc = "data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAAZhtZGF0AAAByW1vb3YAAABsbXZoZAAAAADbe6S823ukvAAAA+gAAAAAAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABidHJhawAAAFx0a2hkAAAAAdt7pLzbe6S8AAAAAQAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAIXbWRpYQAAACBtZGhkAAAAAdt7pLzbe6S8AAAA6AAAA+gUAAAAAAAhYmxlbgAAAAAAbWluZgAAABRoZGxyAAAAAAAAAAB2aWRlAAAAAAAAAAAAAAAVZGluZgAAABxkcmVmAAAAAAAAAAEAAAAMdXJsIAAAAAEAAAEQc3RibAAAALhzdHNkAAAAAAAAAAEAAACWYXZjMQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAD6APoAAAAAABIAAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAs/+EAFWfEACz7AQZAgIACAo6CkoCigKKAoAAAHAAB4XAXi4AAAAAoc3R0cwAAAAAAAAABAAAAAQAA6AAAAAAAc3RzYwAAAAAAAAABAAAAAQAAAAEAAAABAAAAFHN0c3oAAAAAAAAAAAAAAAEAAAAUc3RjbwAAAAAAAAABAAAALAAAAGd1ZHRhAAAAX21ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1klyAAAAAAAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRhAAAAAQAAAABMYXZmNTguMjkuMTAw";
 
-        let lineIdx = 0;
-        function typeBoot() {
-            if (lineIdx < bootLines.length) {
-                const p = document.createElement('p');
-                p.textContent = bootLines[lineIdx];
-                bootScreen.appendChild(p);
-                lineIdx++;
-                setTimeout(typeBoot, 600);
-            } else {
-                setTimeout(() => {
-                    bootScreen.style.display = 'none';
-                    mainUI.style.display = 'block';
-                }, 500);
-            }
-        }
-
-        // 2. Wake Lock & Timer Logic
         async function startCaffeine() {
+            addLog("Attempting to acquire system lock...");
+            
+            // Method 1: Screen Wake Lock API
             try {
-                wakeLock = await navigator.wakeLock.request('screen');
-                statusEl.textContent = "ACTIVE";
-                statusEl.className = "status-active";
-                btn.textContent = "TERMINATE CORE";
-                addLog("WakeLock acquired. Auto-lock disabled.");
-                
-                startTime = Date.now();
-                timerInterval = setInterval(updateTimer, 1000);
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    addLog("API: WakeLock acquired.");
+                }
             } catch (err) {
-                addLog("Error: System policy may block WakeLock.");
+                addLog("API: Blocked by system policy.");
             }
+
+            // Method 2: Video Loop (The reliable backup)
+            vid.src = silentVideoSrc;
+            vid.play().then(() => {
+                addLog("VIDEO: Heartbeat loop active.");
+            }).catch(() => {
+                addLog("VIDEO: Playback failed.");
+            });
+
+            statusEl.textContent = "ACTIVE";
+            statusEl.className = "status-active";
+            btn.textContent = "TERMINATE CORE";
+            startTime = Date.now();
+            timerInterval = setInterval(updateTimer, 1000);
         }
 
         function stopCaffeine() {
-            if (wakeLock) {
-                wakeLock.release();
-                wakeLock = null;
-            }
+            if (wakeLock) { wakeLock.release(); wakeLock = null; }
+            vid.pause();
+            vid.src = "";
             clearInterval(timerInterval);
             statusEl.textContent = "IDLE";
-            statusEl.className = "status-idle";
+            statusEl.className = "";
             btn.textContent = "INITIALIZE CORE";
-            addLog("WakeLock released. System idle.");
+            addLog("System released.");
         }
 
         function updateTimer() {
             const elapsed = Date.now() - startTime;
-            const seconds = Math.floor((elapsed / 1000) % 60).toString().padStart(2, '0');
-            const minutes = Math.floor((elapsed / (1000 * 60)) % 60).toString().padStart(2, '0');
-            const hours = Math.floor((elapsed / (1000 * 60 * 60))).toString().padStart(2, '0');
-            timerEl.textContent = `${hours}:${minutes}:${seconds}`;
+            const s = Math.floor((elapsed / 1000) % 60).toString().padStart(2, '0');
+            const m = Math.floor((elapsed / 60000) % 60).toString().padStart(2, '0');
+            const h = Math.floor(elapsed / 3600000).toString().padStart(2, '0');
+            timerEl.textContent = `${h}:${m}:${s}`;
         }
 
         function addLog(msg) {
             const entry = document.createElement('div');
-            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            entry.textContent = `> ${msg}`;
             logEl.prepend(entry);
         }
 
         btn.addEventListener('click', () => {
-            if (!wakeLock) {
-                startCaffeine();
-            } else {
-                stopCaffeine();
-            }
+            if (statusEl.textContent === "IDLE") startCaffeine();
+            else stopCaffeine();
         });
 
-        // Start the sequence
-        typeBoot();
+        // Simple boot sequence
+        setTimeout(() => { document.getElementById('boot-screen').style.display='none'; document.getElementById('main-ui').style.display='block'; }, 1000);
     </script>
 </body>
 </html>
