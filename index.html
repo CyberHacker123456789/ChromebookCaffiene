@@ -2,11 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>System Monitor v4.2</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SYSTEM_CAFFEINE_v5.0</title>
     <style>
+        :root { --main-green: #00ff41; --bg-black: #0d0d0d; }
         body {
-            background-color: #0d0d0d;
-            color: #00ff41;
+            background-color: var(--bg-black);
+            color: var(--main-green);
             font-family: 'Courier New', Courier, monospace;
             display: flex;
             flex-direction: column;
@@ -16,101 +18,177 @@
             margin: 0;
             overflow: hidden;
         }
-        #main-ui { display: none; text-align: center; border: 1px solid #00ff41; padding: 30px; box-shadow: 0 0 15px #00ff41; }
-        .btn { background: transparent; color: #00ff41; border: 2px solid #00ff41; padding: 10px 25px; font-size: 1.2rem; cursor: pointer; margin-top: 20px; }
-        .btn:hover { background: #00ff41; color: #0d0d0d; }
-        #log { margin-top: 20px; font-size: 0.8rem; height: 80px; overflow-y: auto; text-align: left; width: 100%; border-top: 1px solid #00ff41; }
-        .status-active { color: #00ff41; font-weight: bold; text-shadow: 0 0 5px #00ff41; }
+
+        /* --- LOADING SCREEN --- */
+        #loader {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid transparent;
+            border-top: 3px solid var(--main-green);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* --- MAIN UI --- */
+        #main-ui {
+            display: none;
+            text-align: center;
+            border: 1px solid var(--main-green);
+            padding: 40px;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+            max-width: 500px;
+        }
+
+        .btn {
+            background: transparent;
+            color: var(--main-green);
+            border: 1px solid var(--main-green);
+            padding: 12px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin: 10px;
+            transition: 0.2s;
+            text-transform: uppercase;
+        }
+        .btn:hover { background: var(--main-green); color: var(--bg-black); box-shadow: 0 0 10px var(--main-green); }
+
+        #log {
+            margin-top: 20px;
+            font-size: 0.75rem;
+            height: 100px;
+            overflow-y: auto;
+            text-align: left;
+            border-top: 1px solid var(--main-green);
+            padding: 10px;
+            opacity: 0.8;
+        }
+        .status-active { color: var(--main-green); font-weight: bold; text-shadow: 0 0 8px var(--main-green); }
+        video { width: 1px; height: 1px; opacity: 0.01; position: absolute; pointer-events: none; }
     </style>
 </head>
 <body>
 
-    <div id="boot-screen"></div>
+    <div id="loader">
+        <div class="spinner"></div>
+        <div id="load-text">BOOTING SYSTEM...</div>
+    </div>
 
     <div id="main-ui">
-        <h2>SYSTEM_STAY_AWAKE_PROTOCOL</h2>
-        <p>Status: <span id="status">IDLE</span></p>
-        <p>Uptime: <span id="timer">00:00:00</span></p>
-        <button class="btn" id="toggleBtn">INITIALIZE CORE</button>
-        <video id="caffeineVideo" loop playsinline muted style="display:none;"></video>
+        <h2 style="letter-spacing: 3px;">CORE_STAY_AWAKE</h2>
+        <hr style="border: 0.5px solid var(--main-green);">
+        <p>STATUS: <span id="status">OFFLINE</span></p>
+        <p>RUNTIME: <span id="timer">00:00:00</span></p>
+        
+        <button class="btn" id="startBtn">Initialize Core</button>
+        <button class="btn" id="pipBtn" style="display:none;">Enable Floating Mode</button>
+        
+        <video id="caffeineVid" loop playsinline muted></video>
+        
         <div id="log"></div>
     </div>
 
     <script>
+        const loader = document.getElementById('loader');
+        const loadText = document.getElementById('load-text');
+        const mainUI = document.getElementById('main-ui');
         const statusEl = document.getElementById('status');
         const timerEl = document.getElementById('timer');
         const logEl = document.getElementById('log');
-        const btn = document.getElementById('toggleBtn');
-        const vid = document.getElementById('caffeineVideo');
+        const startBtn = document.getElementById('startBtn');
+        const pipBtn = document.getElementById('pipBtn');
+        const vid = document.getElementById('caffeineVid');
 
         let wakeLock = null;
-        let timerInterval;
         let startTime;
+        let timerInterval;
 
-        // 1. Tiny 1x1 pixel silent video (Base64)
-        // This ensures the code works without needing an external .mp4 file
-        const silentVideoSrc = "data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAAZhtZGF0AAAByW1vb3YAAABsbXZoZAAAAADbe6S823ukvAAAA+gAAAAAAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABidHJhawAAAFx0a2hkAAAAAdt7pLzbe6S8AAAAAQAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAIXbWRpYQAAACBtZGhkAAAAAdt7pLzbe6S8AAAA6AAAA+gUAAAAAAAhYmxlbgAAAAAAbWluZgAAABRoZGxyAAAAAAAAAAB2aWRlAAAAAAAAAAAAAAAVZGluZgAAABxkcmVmAAAAAAAAAAEAAAAMdXJsIAAAAAEAAAEQc3RibAAAALhzdHNkAAAAAAAAAAEAAACWYXZjMQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAD6APoAAAAAABIAAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAs/+EAFWfEACz7AQZAgIACAo6CkoCigKKAoAAAHAAB4XAXi4AAAAAoc3R0cwAAAAAAAAABAAAAAQAA6AAAAAAAc3RzYwAAAAAAAAABAAAAAQAAAAEAAAABAAAAFHN0c3oAAAAAAAAAAAAAAAEAAAAUc3RjbwAAAAAAAAABAAAALAAAAGd1ZHRhAAAAX21ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1klyAAAAAAAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRhAAAAAQAAAABMYXZmNTguMjkuMTAw";
+        // --- 1. THE COOL LOADING SEQUENCE ---
+        const bootSteps = [
+            "DECRYPTING CORE...",
+            "BYPASSING SLEEP_TIMER...",
+            "ESTABLISHING WAKE_LOCK...",
+            "SYSTEM READY."
+        ];
 
-        async function startCaffeine() {
-            addLog("Attempting to acquire system lock...");
+        let step = 0;
+        const loadInterval = setInterval(() => {
+            if (step < bootSteps.length) {
+                loadText.innerText = bootSteps[step];
+                step++;
+            } else {
+                clearInterval(loadInterval);
+                loader.style.display = 'none';
+                mainUI.style.display = 'block';
+            }
+        }, 800);
+
+        // --- 2. THE CAFFEINE LOGIC ---
+        const videoSrc = "data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAAZhtZGF0AAAByW1vb3YAAABsbXZoZAAAAADbe6S823ukvAAAA+gAAAAAAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABidHJhawAAAFx0a2hkAAAAAdt7pLzbe6S8AAAAAQAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAIXbWRpYQAAACBtZGhkAAAAAdt7pLzbe6S8AAAA6AAAA+gUAAAAAAAhYmxlbgAAAAAAbWluZgAAABRoZGxyAAAAAAAAAAB2aWRlAAAAAAAAAAAAAAAVZGluZgAAABxkcmVmAAAAAAAAAAEAAAAMdXJsIAAAAAEAAAEQc3RibAAAALhzdHNkAAAAAAAAAAEAAACWYXZjMQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAD6APoAAAAAABIAAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAs/+EAFWfEACz7AQZAgIACAo6CkoCigKKAoAAAHAAB4XAXi4AAAAAoc3R0cwAAAAAAAAABAAAAAQAA6AAAAAAAc3RzYwAAAAAAAAABAAAAAQAAAAEAAAABAAAAFHN0c3oAAAAAAAAAAAAAAAEAAAAUc3RjbwAAAAAAAAABAAAALAAAAGd1ZHRhAAAAX21ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1klyAAAAAAAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRhAAAAAQAAAABMYXZmNTguMjkuMTAw";
+
+        async function activateCaffeine() {
+            addLog("Requesting WakeLock...");
             
-            // Method 1: Screen Wake Lock API
+            // Try Official API
             try {
                 if ('wakeLock' in navigator) {
                     wakeLock = await navigator.wakeLock.request('screen');
-                    addLog("API: WakeLock acquired.");
+                    addLog("API: Success.");
                 }
             } catch (err) {
-                addLog("API: Blocked by system policy.");
+                addLog("API: Blocked by Policy.");
             }
 
-            // Method 2: Video Loop (The reliable backup)
-            vid.src = silentVideoSrc;
-            vid.play().then(() => {
-                addLog("VIDEO: Heartbeat loop active.");
-            }).catch(() => {
-                addLog("VIDEO: Playback failed.");
-            });
-
-            statusEl.textContent = "ACTIVE";
+            // Start Video Heartbeat
+            vid.src = videoSrc;
+            await vid.play();
+            addLog("VIDEO: Heartbeat active.");
+            
+            // Show PiP Button
+            pipBtn.style.display = "inline-block";
+            
+            // Update UI
+            statusEl.innerText = "ONLINE";
             statusEl.className = "status-active";
-            btn.textContent = "TERMINATE CORE";
+            startBtn.innerText = "Terminate";
             startTime = Date.now();
             timerInterval = setInterval(updateTimer, 1000);
         }
 
-        function stopCaffeine() {
-            if (wakeLock) { wakeLock.release(); wakeLock = null; }
-            vid.pause();
-            vid.src = "";
-            clearInterval(timerInterval);
-            statusEl.textContent = "IDLE";
-            statusEl.className = "";
-            btn.textContent = "INITIALIZE CORE";
-            addLog("System released.");
-        }
+        // Floating Window (Picture-in-Picture)
+        pipBtn.addEventListener('click', async () => {
+            try {
+                await vid.requestPictureInPicture();
+                addLog("PIP: Floating window active.");
+            } catch (e) {
+                addLog("PIP: Failed. (Needs User Interaction)");
+            }
+        });
 
         function updateTimer() {
-            const elapsed = Date.now() - startTime;
-            const s = Math.floor((elapsed / 1000) % 60).toString().padStart(2, '0');
-            const m = Math.floor((elapsed / 60000) % 60).toString().padStart(2, '0');
-            const h = Math.floor(elapsed / 3600000).toString().padStart(2, '0');
-            timerEl.textContent = `${h}:${m}:${s}`;
+            const diff = Date.now() - startTime;
+            const h = Math.floor(diff / 3600000).toString().padStart(2, '0');
+            const m = Math.floor((diff / 60000) % 60).toString().padStart(2, '0');
+            const s = Math.floor((diff / 1000) % 60).toString().padStart(2, '0');
+            timerEl.innerText = `${h}:${m}:${s}`;
         }
 
         function addLog(msg) {
-            const entry = document.createElement('div');
-            entry.textContent = `> ${msg}`;
-            logEl.prepend(entry);
+            const div = document.createElement('div');
+            div.innerText = `> ${msg}`;
+            logEl.prepend(div);
         }
 
-        btn.addEventListener('click', () => {
-            if (statusEl.textContent === "IDLE") startCaffeine();
-            else stopCaffeine();
+        startBtn.addEventListener('click', () => {
+            if (statusEl.innerText === "OFFLINE") activateCaffeine();
+            else location.reload(); // Quick reset
         });
-
-        // Simple boot sequence
-        setTimeout(() => { document.getElementById('boot-screen').style.display='none'; document.getElementById('main-ui').style.display='block'; }, 1000);
     </script>
 </body>
 </html>
